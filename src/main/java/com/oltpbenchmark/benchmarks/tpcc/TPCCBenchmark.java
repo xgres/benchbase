@@ -80,36 +80,50 @@ public class TPCCBenchmark extends BenchmarkModule {
         final double terminalsPerWarehouse = (double) numTerminals / numWarehouses;
         int workerId = 0;
 
-        for (int w = 0; w < numWarehouses; w++) {
-            // Compute the number of terminals in *this* warehouse
-            int lowerTerminalId = (int) (w * terminalsPerWarehouse);
-            int upperTerminalId = (int) ((w + 1) * terminalsPerWarehouse);
-            // protect against double rounding errors
-            int w_id = w + 1;
-            if (w_id == numWarehouses) {
-                upperTerminalId = numTerminals;
-            }
-            int numWarehouseTerminals = upperTerminalId - lowerTerminalId;
-
-            if (LOG.isDebugEnabled()) {
-                LOG.debug(String.format("w_id %d = %d terminals [lower=%d / upper%d]", w_id, numWarehouseTerminals, lowerTerminalId, upperTerminalId));
-            }
-
-            final double districtsPerTerminal = TPCCConfig.configDistPerWhse / (double) numWarehouseTerminals;
-            for (int terminalId = 0; terminalId < numWarehouseTerminals; terminalId++) {
-                int lowerDistrictId = (int) (terminalId * districtsPerTerminal);
-                int upperDistrictId = (int) ((terminalId + 1) * districtsPerTerminal);
-                if (terminalId + 1 == numWarehouseTerminals) {
-                    upperDistrictId = TPCCConfig.configDistPerWhse;
+        if (terminalsPerWarehouse < 1) {
+            int size = (int) Math.floor((double) numWarehouses / numTerminals);
+            int terminalId = 0;
+            for (int i = 0; i <= numWarehouses; i += size) {
+                int a = i += 1;
+                int b = i + size > numWarehouses ? numWarehouses : i + size;
+                if (a < numWarehouses) {
+                    LOG.info(String.format("Terminal %d servicing warehouses [%d, %d]", terminalId, a, b));
+                    TPCCWorker terminal = new TPCCWorker(this, workerId++, a, b, 1, 10, numWarehouses);
+                    terminals[terminalId++] = terminal;
                 }
-                lowerDistrictId += 1;
-
-                TPCCWorker terminal = new TPCCWorker(this, workerId++, w_id, lowerDistrictId, upperDistrictId, numWarehouses);
-                terminals[lowerTerminalId + terminalId] = terminal;
             }
+            terminals = Arrays.copyOf(terminals, terminalId);
+        } else {
+            for (int w = 0; w < numWarehouses; w++) {
+                // Compute the number of terminals in *this* warehouse
+                int lowerTerminalId = (int) (w * terminalsPerWarehouse);
+                int upperTerminalId = (int) ((w + 1) * terminalsPerWarehouse);
+                // protect against double rounding errors
+                int w_id = w + 1;
+                if (w_id == numWarehouses) {
+                    upperTerminalId = numTerminals;
+                }
+                int numWarehouseTerminals = upperTerminalId - lowerTerminalId;
 
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug(String.format("w_id %d = %d terminals [lower=%d / upper%d]", w_id, numWarehouseTerminals, lowerTerminalId, upperTerminalId));
+                }
+
+                final double districtsPerTerminal = TPCCConfig.configDistPerWhse / (double) numWarehouseTerminals;
+                for (int terminalId = 0; terminalId < numWarehouseTerminals; terminalId++) {
+                    int lowerDistrictId = (int) (terminalId * districtsPerTerminal);
+                    int upperDistrictId = (int) ((terminalId + 1) * districtsPerTerminal);
+                    if (terminalId + 1 == numWarehouseTerminals) {
+                        upperDistrictId = TPCCConfig.configDistPerWhse;
+                    }
+                    lowerDistrictId += 1;
+
+                    TPCCWorker terminal = new TPCCWorker(this, workerId++, w_id, w_id, lowerDistrictId, upperDistrictId, numWarehouses);
+                    terminals[lowerTerminalId + terminalId] = terminal;
+                }
+
+            }
         }
-
 
         return Arrays.asList(terminals);
     }
