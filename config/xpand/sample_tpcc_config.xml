@@ -23,6 +23,13 @@
         </work>
     </works>
 
+    <!-- Terminal to Warehouse Distribution Method -->
+    <terminalDistributionMethod>default</terminalDistributionMethod>
+<!--
+    <terminalDistributionMethod>random</terminalDistributionMethod>
+    <terminalDistributionMethod>segmented</terminalDistributionMethod>
+-->
+
     <!-- TPCC specific -->
     <transactiontypes>
         <transactiontype>

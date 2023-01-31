@@ -23,6 +23,7 @@ import com.oltpbenchmark.api.BenchmarkModule;
 import com.oltpbenchmark.api.Loader;
 import com.oltpbenchmark.api.Worker;
 import com.oltpbenchmark.benchmarks.tpcc.procedures.NewOrder;
+import org.apache.commons.configuration2.XMLConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,6 +74,29 @@ public class TPCCBenchmark extends BenchmarkModule {
 
         int numTerminals = workConf.getTerminals();
 
+        enum TerminalDistributionMethod {
+          DEFAULT_DISTRIBUTION_METHOD,
+          SEGMENTED_DISTRIBUTION_METHOD,
+          RANDOM_DISTRIBUTION_METHOD
+        };
+
+        XMLConfiguration xmlConfig = workConf.getXmlConfig();
+        TerminalDistributionMethod terminalDistributionMethod =
+            TerminalDistributionMethod.DEFAULT_DISTRIBUTION_METHOD;
+        if (xmlConfig != null && xmlConfig.containsKey("/terminalDistributionMethod")) {
+            switch (xmlConfig.getString("/terminalDistributionMethod")) {
+                case "random":
+                    terminalDistributionMethod = TerminalDistributionMethod.RANDOM_DISTRIBUTION_METHOD;
+                    break;
+                case "segmented":
+                    terminalDistributionMethod = TerminalDistributionMethod.SEGMENTED_DISTRIBUTION_METHOD;
+                    break;
+                default:
+                    terminalDistributionMethod = TerminalDistributionMethod.DEFAULT_DISTRIBUTION_METHOD;
+                    break;
+            }
+        }
+
         // We distribute terminals evenly across the warehouses
         // Eg. if there are 10 terminals across 7 warehouses, they
         // are distributed as
@@ -80,11 +104,20 @@ public class TPCCBenchmark extends BenchmarkModule {
         final double terminalsPerWarehouse = (double) numTerminals / numWarehouses;
         int workerId = 0;
 
-        if (terminalsPerWarehouse < 1) {
+        if (terminalsPerWarehouse >= 1
+            && terminalDistributionMethod == TerminalDistributionMethod.SEGMENTED_DISTRIBUTION_METHOD) {
+          LOG.error("Segmented distribution designed only for use when terminals per warehouse < 1.");
+          System.exit(1);
+        }
+
+        if (terminalDistributionMethod == TerminalDistributionMethod.SEGMENTED_DISTRIBUTION_METHOD) {
+            /*
+             * This will only be correct if warehouses are equally partitionable by terminals.
+             */
             int size = (int) Math.floor((double) numWarehouses / numTerminals);
             int terminalId = 0;
             for (int i = 0; i <= numWarehouses; i += size) {
-                int a = i += 1;
+                int a = (i == 0) ? 1 : ++i;
                 int b = i + size > numWarehouses ? numWarehouses : i + size;
                 if (a < numWarehouses) {
                     LOG.info(String.format("Terminal %d servicing warehouses [%d, %d]", terminalId, a, b));
@@ -93,6 +126,12 @@ public class TPCCBenchmark extends BenchmarkModule {
                 }
             }
             terminals = Arrays.copyOf(terminals, terminalId);
+        } else if (terminalDistributionMethod == TerminalDistributionMethod.RANDOM_DISTRIBUTION_METHOD) {
+            for (int terminalId = 0; terminalId < numTerminals; terminalId++) {
+                LOG.info(String.format("Terminal %d servicing warehouses [%d, %d]", terminalId, 1, numWarehouses));
+                TPCCWorker terminal = new TPCCWorker(this, workerId++, 1, numWarehouses, 1, 10, numWarehouses);
+                terminals[terminalId] = terminal;
+            }
         } else {
             for (int w = 0; w < numWarehouses; w++) {
                 // Compute the number of terminals in *this* warehouse
